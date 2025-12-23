@@ -152,6 +152,7 @@ flashquiz-plus/
 | Charts | Recharts |
 | Icons | Lucide React |
 | Document Parsing | pdf-parse, mammoth |
+| Database | Supabase (PostgreSQL) |
 
 ---
 
@@ -162,11 +163,42 @@ flashquiz-plus/
 Create a `.env.local` file:
 
 ```env
+# Required for AI generation
 NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-NEXT_PUBLIC_USE_MOCK_DATA=false
+
+# Optional: Database (Supabase)
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 Get your free Gemini API key at: https://aistudio.google.com/apikey
+
+### Database Setup (Optional)
+
+The app works without a database using localStorage, but for persistent user data:
+
+1. Create a free account at [Supabase](https://supabase.com)
+2. Create a new project
+3. Go to SQL Editor and run the contents of `supabase-schema.sql`
+4. Copy your project URL and anon key to `.env.local`
+
+---
+
+## 🚀 Deploy to Vercel
+
+### One-Click Deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MaryamSameen/VibeHackathon-2026)
+
+### Manual Deployment
+
+1. Push your code to GitHub
+2. Go to [Vercel](https://vercel.com) and import your repository
+3. Add environment variables:
+   - `NEXT_PUBLIC_GEMINI_API_KEY`
+   - `NEXT_PUBLIC_SUPABASE_URL` (optional)
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (optional)
+4. Deploy!
 
 ---
 

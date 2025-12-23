@@ -35,7 +35,13 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Mock user database
+// Check if database is configured
+const isDatabaseEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+};
+
+// Fallback mock users for when database is not configured
 const mockUsers: { email: string; password: string; name: string }[] = [
   { email: 'demo@flashquiz.com', password: 'demo123', name: 'Demo User' }
 ];
@@ -49,35 +55,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
   const [currentFlashcards, setCurrentFlashcards] = useState<FlashcardSet | null>(null);
+  const [useDatabase, setUseDatabase] = useState(false);
 
   // Load user from localStorage on mount
   useEffect(() => {
+    const dbEnabled = isDatabaseEnabled();
+    setUseDatabase(dbEnabled);
+    
     const storedUser = localStorage.getItem('flashquiz_user');
-    const storedQuizzes = localStorage.getItem('flashquiz_quizzes');
-    const storedFlashcards = localStorage.getItem('flashquiz_flashcards');
-    const storedAttempts = localStorage.getItem('flashquiz_attempts');
-    const storedActivities = localStorage.getItem('flashquiz_activities');
     
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    if (storedQuizzes) {
-      setQuizzes(JSON.parse(storedQuizzes));
-    }
-    if (storedFlashcards) {
-      setFlashcardSets(JSON.parse(storedFlashcards));
-    }
-    if (storedAttempts) {
-      setQuizAttempts(JSON.parse(storedAttempts));
-    }
-    if (storedActivities) {
-      setActivities(JSON.parse(storedActivities));
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      
+      // If database is enabled, load user data from database
+      if (dbEnabled) {
+        loadUserDataFromDatabase(parsedUser.id);
+      } else {
+        // Load from localStorage
+        loadFromLocalStorage();
+      }
+    } else {
+      loadFromLocalStorage();
     }
     
     setIsLoading(false);
   }, []);
 
-  // Save to localStorage when data changes
+  const loadFromLocalStorage = () => {
+    const storedQuizzes = localStorage.getItem('flashquiz_quizzes');
+    const storedFlashcards = localStorage.getItem('flashquiz_flashcards');
+    const storedAttempts = localStorage.getItem('flashquiz_attempts');
+    const storedActivities = localStorage.getItem('flashquiz_activities');
+    
+    if (storedQuizzes) setQuizzes(JSON.parse(storedQuizzes));
+    if (storedFlashcards) setFlashcardSets(JSON.parse(storedFlashcards));
+    if (storedAttempts) setQuizAttempts(JSON.parse(storedAttempts));
+    if (storedActivities) setActivities(JSON.parse(storedActivities));
+  };
+
+  const loadUserDataFromDatabase = async (userId: string) => {
+    try {
+      const response = await fetch('/api/user-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'load_user_data', userId }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setQuizzes(data.quizzes || []);
+        setFlashcardSets(data.flashcardSets || []);
+        setQuizAttempts(data.quizAttempts || []);
+        setActivities(data.activities || []);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      loadFromLocalStorage();
+    }
+  };
+
+  // Save to localStorage when data changes (always, as backup)
   useEffect(() => {
     if (user) {
       localStorage.setItem('flashquiz_user', JSON.stringify(user));
@@ -101,7 +139,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [activities]);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulate API call
+    if (useDatabase) {
+      try {
+        const response = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'login', email, password }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const newUser: User = {
+            ...data.user,
+            createdAt: new Date(data.user.createdAt),
+          };
+          setUser(newUser);
+          await loadUserDataFromDatabase(newUser.id);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Login error:', error);
+        return false;
+      }
+    }
+    
+    // Fallback to mock authentication
     await new Promise(resolve => setTimeout(resolve, 500));
     
     const foundUser = mockUsers.find(u => u.email === email && u.password === password);
@@ -121,15 +184,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const signup = async (name: string, email: string, password: string): Promise<boolean> => {
-    // Simulate API call
+    if (useDatabase) {
+      try {
+        const response = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'signup', name, email, password }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const newUser: User = {
+            ...data.user,
+            createdAt: new Date(data.user.createdAt),
+          };
+          setUser(newUser);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Signup error:', error);
+        return false;
+      }
+    }
+    
+    // Fallback to mock signup
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Check if user already exists
     if (mockUsers.find(u => u.email === email)) {
       return false;
     }
     
-    // Add to mock database
     mockUsers.push({ email, password, name });
     
     const newUser: User = {
@@ -144,34 +229,107 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    setQuizzes([]);
+    setFlashcardSets([]);
+    setQuizAttempts([]);
+    setActivities([]);
     localStorage.removeItem('flashquiz_user');
+    localStorage.removeItem('flashquiz_quizzes');
+    localStorage.removeItem('flashquiz_flashcards');
+    localStorage.removeItem('flashquiz_attempts');
+    localStorage.removeItem('flashquiz_activities');
   };
 
-  const updateProfile = (updates: Partial<User>) => {
-    if (user) {
-      setUser({ ...user, ...updates });
+  const updateProfile = async (updates: Partial<User>) => {
+    if (!user) return;
+    
+    const updatedUser = { ...user, ...updates };
+    setUser(updatedUser);
+    
+    if (useDatabase) {
+      try {
+        await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            action: 'update', 
+            userId: user.id, 
+            updates: { name: updates.name, email: updates.email } 
+          }),
+        });
+      } catch (error) {
+        console.error('Update profile error:', error);
+      }
     }
   };
 
-  const addQuiz = (quiz: Quiz) => {
+  const addQuiz = async (quiz: Quiz) => {
     setQuizzes(prev => [quiz, ...prev]);
+    
+    if (useDatabase && user) {
+      try {
+        await fetch('/api/user-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_quiz', userId: user.id, data: quiz }),
+        });
+      } catch (error) {
+        console.error('Save quiz error:', error);
+      }
+    }
   };
 
-  const addFlashcardSet = (set: FlashcardSet) => {
+  const addFlashcardSet = async (set: FlashcardSet) => {
     setFlashcardSets(prev => [set, ...prev]);
+    
+    if (useDatabase && user) {
+      try {
+        await fetch('/api/user-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_flashcard_set', userId: user.id, data: set }),
+        });
+      } catch (error) {
+        console.error('Save flashcard set error:', error);
+      }
+    }
   };
 
-  const addQuizAttempt = (attempt: QuizAttempt) => {
+  const addQuizAttempt = async (attempt: QuizAttempt) => {
     setQuizAttempts(prev => [attempt, ...prev]);
+    
+    if (useDatabase && user) {
+      try {
+        await fetch('/api/user-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_quiz_attempt', userId: user.id, data: attempt }),
+        });
+      } catch (error) {
+        console.error('Save attempt error:', error);
+      }
+    }
   };
 
-  const addActivity = (activity: Omit<ActivityItem, 'id' | 'timestamp'>) => {
+  const addActivity = async (activity: Omit<ActivityItem, 'id' | 'timestamp'>) => {
     const newActivity: ActivityItem = {
       ...activity,
       id: generateId(),
       timestamp: new Date(),
     };
     setActivities(prev => [newActivity, ...prev].slice(0, 20));
+    
+    if (useDatabase && user) {
+      try {
+        await fetch('/api/user-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_activity', userId: user.id, data: newActivity }),
+        });
+      } catch (error) {
+        console.error('Save activity error:', error);
+      }
+    }
   };
 
   const stats: UserStats = {
@@ -185,7 +343,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       weekAgo.setDate(weekAgo.getDate() - 7);
       return new Date(a.completedAt) > weekAgo;
     }).length,
-    flashcardsStudied: flashcardSets.length * 5, // Simulated
+    flashcardsStudied: flashcardSets.length * 5,
     streakDays: Math.min(quizAttempts.length, 7),
   };
 
