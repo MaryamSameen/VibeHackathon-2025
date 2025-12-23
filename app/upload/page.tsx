@@ -84,28 +84,17 @@ export default function UploadPage() {
     try {
       let text = '';
       
-      if (file.name.endsWith('.txt')) {
-        setProcessingStep('Reading document...');
-        text = await file.text();
-      } else {
-        setProcessingStep('Extracting text from document...');
-        // For demo, we'll simulate text extraction
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        text = `This is sample extracted content from ${file.name}. 
-        
-Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed. It focuses on developing computer programs that can access data and use it to learn for themselves.
-
-The process begins with observations or data, such as examples, direct experience, or instruction, to look for patterns in data and make better decisions in the future. The primary aim is to allow computers to learn automatically without human intervention.
-
-Key concepts in machine learning include:
-1. Supervised Learning - Uses labeled data to train models
-2. Unsupervised Learning - Finds patterns in unlabeled data
-3. Reinforcement Learning - Learns through trial and error
-4. Neural Networks - Computing systems inspired by biological neural networks
-5. Deep Learning - Uses multi-layered neural networks
-
-Common applications include image recognition, speech recognition, natural language processing, recommendation systems, and predictive analytics.`;
+      setProcessingStep('Extracting text from document...');
+      
+      // Use the actual text extraction function
+      text = await extractTextFromFile(file);
+      
+      if (!text || text.trim().length < 50) {
+        throw new Error('Could not extract enough text from the document. Please try a different file.');
       }
+      
+      console.log('Extracted text length:', text.length);
+      console.log('Extracted text preview:', text.substring(0, 200));
 
       if (useMockData) {
         setProcessingStep(`Generating ${type}...`);

@@ -1,52 +1,27 @@
-// AI Integration using Google Generative AI SDK with Gemini
+// AI Integration - calls server-side API route for Gemini
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Flashcard, QuizQuestion } from '@/types';
-import { chunkText, generateId } from '@/utils/helpers';
+import { generateId } from '@/utils/helpers';
 
-// Get API keys from environment variable
-const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'AIzaSyBHKzU0pZ0BtKTvQSP4geU0y81yQBZ18VY';
+// Check if mock data should be used
+const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 
-// Check if mock data should be used (only if no API key is available)
-const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true' || !GEMINI_API_KEY;
+// Call the server-side API route for AI generation
+async function callAIRoute(text: string, type: 'flashcards' | 'quiz', count: number): Promise<Record<string, unknown>> {
+  const response = await fetch('/api/generate-ai', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text, type, count }),
+  });
 
-// Initialize Gemini
-const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
-
-async function callGeminiSDK(prompt: string): Promise<string> {
-  if (!genAI) {
-    throw new Error('NO_GEMINI_API_KEY');
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'AI generation failed');
   }
 
-  try {
-    // Use gemini-1.5-flash which is more stable
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    
-    console.log('Sending request to Gemini...');
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    
-    if (!text) {
-      throw new Error('No content in Gemini response');
-    }
-    
-    console.log('Gemini response received');
-    return text;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Gemini SDK error:', errorMessage);
-    throw error;
-  }
-}
-
-// Unified AI call
-async function callAI(prompt: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('No API key available');
-  }
-  
-  return await callGeminiSDK(prompt);
+  return response.json();
 }
 
 // Check if we should use mock data
@@ -60,65 +35,30 @@ export async function generateFlashcards(
 ): Promise<Flashcard[]> {
   // If mock data is enabled, return mock flashcards immediately
   if (USE_MOCK_DATA) {
-    console.log('Using mock flashcards (API key not configured)');
+    console.log('Using mock flashcards (mock mode enabled)');
     return getMockFlashcards(count);
   }
 
-  const chunks = chunkText(text, 3000);
-  const allFlashcards: Flashcard[] = [];
-  const cardsPerChunk = Math.ceil(count / chunks.length);
-
-  for (const chunk of chunks) {
-    if (allFlashcards.length >= count) break;
-
-    const prompt = `You are an expert educator. Based on the following text, generate exactly ${cardsPerChunk} flashcards for studying.
-
-TEXT:
-${chunk}
-
-Generate flashcards in the following JSON format ONLY (no markdown, no explanation):
-{
-  "flashcards": [
-    { "question": "Question text here?", "answer": "Clear, concise answer here" }
-  ]
-}
-
-Requirements:
-- Questions should test key concepts
-- Answers should be clear and educational
-- Cover different topics from the text
-- Make questions progressively more challenging`;
-
-    try {
-      const fullPrompt = `You are a helpful educational assistant that generates flashcards. Always respond with valid JSON only.
-
-${prompt}`;
-      const response = await callAI(fullPrompt);
-
-      // Clean response - remove markdown code blocks
-      let cleanResponse = response.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.flashcards && Array.isArray(parsed.flashcards)) {
-          const cardsWithIds = parsed.flashcards.map((card: { question: string; answer: string }) => ({
-            id: generateId(),
-            question: card.question,
-            answer: card.answer,
-          }));
-          allFlashcards.push(...cardsWithIds);
-        }
-      }
-    } catch (error) {
-      console.error('Error generating flashcards for chunk:', error);
-      // Fallback to mock data on API error
-      console.log('Falling back to mock flashcards');
-      return getMockFlashcards(count);
+  try {
+    console.log('Calling AI API for flashcards...');
+    const result = await callAIRoute(text, 'flashcards', count);
+    
+    if (result.flashcards && Array.isArray(result.flashcards)) {
+      const cardsWithIds = (result.flashcards as Array<{ question: string; answer: string }>).map((card) => ({
+        id: generateId(),
+        question: card.question,
+        answer: card.answer,
+      }));
+      console.log('Generated', cardsWithIds.length, 'flashcards from AI');
+      return cardsWithIds;
     }
+    
+    throw new Error('Invalid response format');
+  } catch (error) {
+    console.error('Error generating flashcards:', error);
+    console.log('Falling back to mock flashcards');
+    return getMockFlashcards(count);
   }
-
-  return allFlashcards.length > 0 ? allFlashcards.slice(0, count) : getMockFlashcards(count);
 }
 
 export async function generateQuiz(
@@ -127,79 +67,37 @@ export async function generateQuiz(
 ): Promise<QuizQuestion[]> {
   // If mock data is enabled, return mock quiz immediately
   if (USE_MOCK_DATA) {
-    console.log('Using mock quiz (API key not configured)');
+    console.log('Using mock quiz (mock mode enabled)');
     return getMockQuiz(count);
   }
 
-  const chunks = chunkText(text, 3000);
-  const allQuestions: QuizQuestion[] = [];
-  const questionsPerChunk = Math.ceil(count / chunks.length);
-
-  for (const chunk of chunks) {
-    if (allQuestions.length >= count) break;
-
-    const prompt = `You are an expert educator. Based on the following text, generate exactly ${questionsPerChunk} multiple choice questions for a quiz.
-
-TEXT:
-${chunk}
-
-Generate quiz questions in the following JSON format ONLY (no markdown, no explanation):
-{
-  "quiz": [
-    {
-      "question": "Question text here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "Option B",
-      "explanation": "Brief explanation why this is correct"
+  try {
+    console.log('Calling AI API for quiz...');
+    const result = await callAIRoute(text, 'quiz', count);
+    
+    if (result.quiz && Array.isArray(result.quiz)) {
+      const questionsWithIds = (result.quiz as Array<{
+        question: string;
+        options: string[];
+        correctAnswer: string;
+        explanation?: string;
+      }>).map((q) => ({
+        id: generateId(),
+        question: q.question,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation,
+      }));
+      console.log('Generated', questionsWithIds.length, 'quiz questions from AI');
+      return questionsWithIds;
     }
-  ]
-}
-
-Requirements:
-- Each question must have exactly 4 options
-- Only ONE option should be correct
-- The correctAnswer must match one of the options exactly
-- Questions should test understanding, not just memorization
-- Include helpful explanations
-- Make questions progressively more challenging`;
-
-    try {
-      const fullPrompt = `You are a helpful educational assistant that generates quiz questions. Always respond with valid JSON only.
-
-${prompt}`;
-      const response = await callAI(fullPrompt);
-
-      // Clean response - remove markdown code blocks
-      let cleanResponse = response.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.quiz && Array.isArray(parsed.quiz)) {
-          const questionsWithIds = parsed.quiz.map((q: { 
-            question: string; 
-            options: string[]; 
-            correctAnswer: string; 
-            explanation?: string 
-          }) => ({
-            id: generateId(),
-            question: q.question,
-            options: q.options,
-            correctAnswer: q.correctAnswer,
-            explanation: q.explanation,
-          }));
-          allQuestions.push(...questionsWithIds);
-        }
-      }
-    } catch (error) {
-      console.error('Error generating quiz for chunk:', error);
-      // Fallback to mock data on API error
-      console.log('Falling back to mock quiz');
-      return getMockQuiz(count);
-    }
+    
+    throw new Error('Invalid response format');
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    console.log('Falling back to mock quiz');
+    return getMockQuiz(count);
   }
-
-  return allQuestions.length > 0 ? allQuestions.slice(0, count) : getMockQuiz(count);
 }
 
 // Fallback mock data for demo/testing
