@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 import { generateId } from '@/utils/helpers';
 
 // Simple hash function for demo (use bcrypt in production)
@@ -15,6 +15,15 @@ function simpleHash(password: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabase();
+    
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Database not configured' },
+        { status: 503 }
+      );
+    }
+    
     const body = await request.json();
     const { action, email, password, name } = body;
 

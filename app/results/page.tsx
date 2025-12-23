@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { cn, calculatePercentage } from '@/utils/helpers';
 
-export default function ResultsPage() {
+function ResultsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading, quizzes, quizAttempts, setCurrentQuiz } = useApp();
@@ -251,5 +251,17 @@ export default function ResultsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    }>
+      <ResultsContent />
+    </Suspense>
   );
 }
