@@ -4,11 +4,11 @@
 ![Next.js](https://img.shields.io/badge/Next.js%2014-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-38B2AC?style=flat-square&logo=tailwind-css)
-![GPT-4o](https://img.shields.io/badge/GPT--4o-Powered-green?style=flat-square&logo=openai)
+![Gemini](https://img.shields.io/badge/Gemini%202.5-Powered-blue?style=flat-square&logo=google)
 
 > **Transform your documents into interactive flashcards and quizzes with AI-powered learning.**
 
-FlashQuiz+ is a modern, hackathon-ready web application that leverages GPT-4o to automatically generate study materials from uploaded documents. Simply upload a PDF, DOCX, or TXT file, and instantly get personalized flashcards or multiple-choice quizzes.
+FlashQuiz+ is a modern, hackathon-ready web application that leverages Google's Gemini 2.5 AI to automatically generate study materials from uploaded documents. Simply upload a PDF, DOCX, or TXT file, and instantly get personalized flashcards or multiple-choice quizzes.
 
 ---
 
@@ -27,11 +27,12 @@ FlashQuiz+ is a modern, hackathon-ready web application that leverages GPT-4o to
 - Progress indicators
 
 ### 🤖 AI-Powered Generation
-- **GPT-4o integration** via Bytez API
-- Automatic text extraction from documents
+- **Gemini 2.5 Flash** integration via Google AI SDK
+- Real text extraction from PDF, DOCX, and TXT files
 - Smart chunking for large documents
 - Structured JSON output for flashcards and quizzes
-- Demo mode with mock data for offline testing
+- Server-side API route for secure AI calls
+- Fallback to mock data for offline testing
 
 ### 📚 Interactive Flashcards
 - Beautiful flip-card animations
@@ -106,7 +107,8 @@ flashquiz-plus/
 ├── app/
 │   ├── api/
 │   │   ├── extract-text/     # Document text extraction API
-│   │   └── generate/         # AI generation API
+│   │   ├── generate/         # Legacy generation API
+│   │   └── generate-ai/      # Gemini AI generation API
 │   ├── auth/
 │   │   ├── signin/           # Sign in page
 │   │   └── signup/           # Sign up page
@@ -127,7 +129,7 @@ flashquiz-plus/
 ├── context/
 │   └── AppContext.tsx        # Global state management
 ├── lib/
-│   ├── ai.ts                 # AI integration (Bytez/GPT-4o)
+│   ├── ai.ts                 # AI client (calls /api/generate-ai)
 │   └── extractText.ts        # Document parsing utilities
 ├── types/
 │   └── index.ts              # TypeScript type definitions
@@ -146,7 +148,7 @@ flashquiz-plus/
 | Language | TypeScript |
 | Styling | Tailwind CSS |
 | State | React Context |
-| AI | GPT-4o via Bytez API |
+| AI | Google Gemini 2.5 Flash |
 | Charts | Recharts |
 | Icons | Lucide React |
 | Document Parsing | pdf-parse, mammoth |
@@ -155,15 +157,16 @@ flashquiz-plus/
 
 ## 🔧 Configuration
 
-### Environment Variables (Optional)
+### Environment Variables
 
 Create a `.env.local` file:
 
 ```env
-BYTEZ_API_KEY=your_bytez_api_key
+NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
 
-The default API key is included for demo purposes.
+Get your free Gemini API key at: https://aistudio.google.com/apikey
 
 ---
 
@@ -238,7 +241,8 @@ FlashQuiz+ is fully responsive and works on:
 
 - ⚡ **Fast Setup** - Get running in under 2 minutes
 - 🎨 **Polished UI** - Judge-ready modern interface
-- 🤖 **Real AI** - Actual GPT-4o integration
+- 🤖 **Real AI** - Google Gemini 2.5 Flash integration
+- 📄 **Real Extraction** - Actual PDF/DOCX text parsing
 - 📊 **Full Analytics** - Professional charts and stats
 - 🔄 **Demo Mode** - Works offline with mock data
 - 📱 **Responsive** - Perfect on any device
@@ -271,11 +275,10 @@ MIT License - Built with ❤️ for Hackathon 2024
 
 ## 🙏 Acknowledgments
 
-- OpenAI for GPT-4o
-- Bytez for API access
+- Google for Gemini AI
 - Vercel for Next.js
 - The open-source community
 
 ---
 
-**Made for Hackathon 2024** 🚀
+**Made for VibeHackathon 2025** 🚀
