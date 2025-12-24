@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const BYTEZ_API_KEY = process.env.BYTEZ_API_KEY || '1617a3a2665138ee6dcf2ec427f7d25f';
+// Gemini API Key
+const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
 
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages, type, count, text } = body;
+    const { type, count, text } = body;
 
     if (!text) {
       return NextResponse.json(
@@ -19,28 +19,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const systemPrompt = type === 'flashcards'
-      ? 'You are a helpful educational assistant that generates flashcards. Always respond with valid JSON only.'
-      : 'You are a helpful educational assistant that generates quiz questions. Always respond with valid JSON only.';
+    if (!GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: 'Gemini API key not configured' },
+        { status: 500 }
+      );
+    }
 
-    const userPrompt = type === 'flashcards'
-      ? `Based on the following text, generate exactly ${count} flashcards for studying.
+    const prompt = type === 'flashcards'
+      ? `You are a helpful educational assistant. Based on the following text, generate exactly ${count} flashcards for studying.
 
 TEXT:
 ${text}
 
-Generate flashcards in the following JSON format ONLY (no markdown, no explanation):
+Generate flashcards in the following JSON format ONLY (no markdown, no explanation, no code blocks):
 {
   "flashcards": [
     { "question": "Question text here?", "answer": "Clear, concise answer here" }
   ]
 }`
-      : `Based on the following text, generate exactly ${count} multiple choice questions for a quiz.
+      : `You are a helpful educational assistant. Based on the following text, generate exactly ${count} multiple choice questions for a quiz.
 
 TEXT:
 ${text}
 
-Generate quiz questions in the following JSON format ONLY (no markdown, no explanation):
+Generate quiz questions in the following JSON format ONLY (no markdown, no explanation, no code blocks):
 {
   "quiz": [
     {
@@ -52,35 +55,10 @@ Generate quiz questions in the following JSON format ONLY (no markdown, no expla
   ]
 }`;
 
-    const apiMessages: Message[] = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ];
-
-    const response = await fetch('https://api.bytez.com/models/openai/gpt-4o/run', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${BYTEZ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        messages: apiMessages,
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Bytez API error:', errorText);
-      return NextResponse.json(
-        { error: 'AI generation failed' },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    const content = data.output?.choices?.[0]?.message?.content;
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text();
 
     if (!content) {
       return NextResponse.json(
@@ -90,7 +68,8 @@ Generate quiz questions in the following JSON format ONLY (no markdown, no expla
     }
 
     // Parse the JSON from the response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const cleanedContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return NextResponse.json(
         { error: 'Invalid JSON in AI response' },
