@@ -28,17 +28,27 @@ export async function POST(request: NextRequest) {
     const { action, email, password, name } = body;
 
     if (action === 'signup') {
-      // Check if user exists
-      const { data: existingUser } = await supabase
+      // Check if user exists - use maybeSingle() to avoid error when no user found
+      const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
+      // If we found a user (not an error, but actual data), reject signup
       if (existingUser) {
         return NextResponse.json(
           { error: 'User already exists' },
           { status: 400 }
+        );
+      }
+      
+      // If there was a real database error (not just "no rows"), handle it
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing user:', checkError);
+        return NextResponse.json(
+          { error: 'Database error' },
+          { status: 500 }
         );
       }
 
@@ -75,14 +85,26 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'login') {
-      const { data: user, error } = await supabase
+      // First, find user by email only
+      const { data: user, error: findError } = await supabase
         .from('users')
         .select('*')
         .eq('email', email)
-        .eq('password_hash', simpleHash(password))
-        .single();
+        .maybeSingle();
 
-      if (error || !user) {
+      // If no user found or database error
+      if (findError || !user) {
+        console.log('Login failed - user not found:', email);
+        return NextResponse.json(
+          { error: 'Invalid credentials' },
+          { status: 401 }
+        );
+      }
+
+      // Check password hash
+      const inputHash = simpleHash(password);
+      if (user.password_hash !== inputHash) {
+        console.log('Login failed - password mismatch for:', email);
         return NextResponse.json(
           { error: 'Invalid credentials' },
           { status: 401 }
